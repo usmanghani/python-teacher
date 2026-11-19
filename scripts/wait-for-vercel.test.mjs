@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { waitForVercel } from './wait-for-vercel.mjs'
+import { readDeploymentSha, waitForVercel } from './wait-for-vercel.mjs'
 
 function scenario(frames) {
   let frame = 0, time = 0
@@ -50,4 +50,11 @@ test('fails clearly when preview protection rejects CI', async () => {
   const options = scenario([{ deployments: [deployment(1)], statuses: { 1: [ready] } }])
   options.probe = async () => { throw new Error('Preview protection rejected CI') }
   await assert.rejects(waitForVercel(options), /Preview protection/)
+})
+
+test('recognises the sign-in redirect of a protected deployment instead of waiting it out', async () => {
+  const redirect = async () => new Response(null, { status: 302, headers: { location: 'https://vercel.com/sso-api?url=https%3A%2F%2Fpython-teacher-preview.vercel.app' } })
+  await assert.rejects(readDeploymentSha('https://python-teacher-preview.vercel.app', '', redirect), /VERCEL_AUTOMATION_BYPASS_SECRET/)
+  const elsewhere = async () => new Response(null, { status: 302, headers: { location: 'https://example.com/' } })
+  assert.equal(await readDeploymentSha('https://python-teacher-preview.vercel.app', '', elsewhere), null)
 })

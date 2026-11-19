@@ -3,10 +3,13 @@ import { pathToFileURL } from 'node:url'
 
 export async function readDeploymentSha(url, secret = '', fetcher = fetch) {
   const response = await fetcher(new URL('/deployment.json', url), {
-    redirect: 'error', signal: AbortSignal.timeout(15_000),
+    redirect: 'manual', signal: AbortSignal.timeout(15_000),
     headers: { 'Cache-Control': 'no-cache', ...(secret ? { 'x-vercel-protection-bypass': secret } : {}) },
   })
-  if (response.status === 401 || response.status === 403) throw new Error('Preview protection rejected CI. Configure VERCEL_AUTOMATION_BYPASS_SECRET.')
+  // Vercel Authentication answers with 401, or with a redirect to its sign-in page.
+  // Either way CI cannot get in, and waiting longer will not change that.
+  const signIn = response.status >= 300 && response.status < 400 && /(^|\.)vercel\.com$/.test(new URL(response.headers.get('location') ?? '', url).hostname)
+  if (response.status === 401 || response.status === 403 || signIn) throw new Error('Preview protection rejected CI. Configure VERCEL_AUTOMATION_BYPASS_SECRET.')
   if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return null
   const data = await response.json()
   return data.sha
