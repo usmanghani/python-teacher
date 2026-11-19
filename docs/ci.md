@@ -1,18 +1,29 @@
-# Tests and checks
+# Tests and release checks
 
-Every push and pull request runs CI (`.github/workflows/ci.yml`):
+Every branch push and pull request runs CI. Local unit tests (including the turtle module on real Python), lint, the page and agent builds, and Chromium browser tests run immediately while a separate job waits up to 15 minutes for Vercel to deploy the exact commit being tested. PR jobs check out the PR head SHA; push jobs check out the pushed SHA. Failed/canceled/inactive deployments and missing deployments fail CI. The candidate must serve `/deployment.json` with the exact commit SHA. This also allows testing a built production candidate while promotion is held by Deployment Checks. The newest deployment wins; an older successful deployment cannot mask a failed redeploy.
 
-- **Unit tests, lint, and build**: `npm run test:ci`, `npm run lint`, the page build and the agent build. The unit tests include the turtle module running on real Python.
-- **Browser tests**: `npm run test:e2e` in Chromium against a local preview, with a scripted model and an in-process Postgres. No credentials are needed.
-- **CI gate**: requires both.
+Once Vercel is ready, `Vercel deployment tests` runs the browser suite against its immutable URL, then sends one real synthetic message to Pip (`npm run test:live`). The live smoke proves the agent route, the same-site check, the quota rules, AI Gateway access and a complete reply. A model call that fails, a turn that does not complete and an empty reply all fail the check; a busy teacher is retried at most three times. It sends no user program or conversation.
 
-CI does not test the Vercel deployment. To check a deployment by hand, run the live smoke against its URL:
+The browser tests that script Pip's answers need the scripted model in `e2e/fake-model.mjs`, and the account tests need the in-process database; only a local preview has those. They are skipped against a deployment, where the live smoke stands in for them. The live smoke does not use Pip's program tools, which need a browser to run the Python.
 
-```bash
-PLAYWRIGHT_BASE_URL=https://your-preview.vercel.app npm run test:live
+`CI gate` requires every job to succeed. There is no successful skip for missing previews. Deployment status events no longer start duplicate CI runs; the push/PR workflow waits directly. Forks never receive the protection bypass secret. A protected fork deployment needs a maintainer-approved deployment/test path; its inaccessible preview cannot pass silently.
+
+## Required external settings
+
+These are account settings, not properties that a workflow file can enforce:
+
+1. GitHub: protect `main`, require PRs, require branches to be current, and require both `CI gate` and `Vercel deployment tests` from GitHub Actions. Disable force pushes and deletions; enforce protection for administrators. The second check has a distinct name from the previous optional preview job.
+2. Vercel: add `CI gate` and `Vercel deployment tests` as required GitHub Deployment Checks before promotion. Keep preview deployments automatic. A successful build is not sufficient to release. Verify the checks are for the production commit, not a previous PR commit.
+3. Vercel/GitHub: configure Protection Bypass for Automation. Store the bypass in the GitHub Actions secret `VERCEL_AUTOMATION_BYPASS_SECRET`; expose it to Vercel functions as required by the rate-limit SDK. Browser credentials are scoped to the deployment origin and traces are disabled when credentials are present.
+4. Configure the two quota rules described in `docs/pip.md`, and make sure the Vercel team can use AI Gateway. Until then, the live check intentionally blocks release.
+
+The wait job accepts a candidate in progress only once its URL serves the expected build commit marker. It does not depend on the success status emitted after production promotion, avoiding a cycle between promotion and tests.
+
+An administrator can apply the reviewed GitHub protection payload with:
+
+```sh
+gh api --method PUT repos/usmanghani/python-teacher/branches/main/protection --input .github/main-protection.json
 ```
-
-If the deployment is behind Vercel Deployment Protection, also set `VERCEL_AUTOMATION_BYPASS_SECRET`. `scripts/wait-for-vercel.mjs` is included for wiring deployment tests into CI later, as Logo Teacher does.
 
 ## Local commands
 
@@ -24,6 +35,8 @@ npm run build
 npm run build:agent
 npx playwright install chromium
 npm run test:e2e
+PLAYWRIGHT_BASE_URL=https://your-preview.vercel.app npm run test:e2e
+PLAYWRIGHT_BASE_URL=https://your-preview.vercel.app npm run test:live
 ```
 
 Node 24 is used by CI and declared in package.json for Vercel. `npm ci` installs the committed lockfile. Monaco and Pyodide are copied from their pinned dependencies before builds and served from versioned local URLs. Browser coverage blocks public CDNs to prove the editor and Python work without them.
@@ -31,3 +44,9 @@ Node 24 is used by CI and declared in package.json for Vercel. `npm ci` installs
 ## Browser session
 
 The editor saves edits in sessionStorage, scoped to this browser tab. Refresh restores source, including an intentionally empty editor, without running it. `Clear saved session` asks before clearing. Use **My programs** to keep a program.
+
+## References
+
+- https://vercel.com/docs/deployment-checks
+- https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/protection-bypass-automation
+- https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches
