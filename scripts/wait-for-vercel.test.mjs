@@ -58,3 +58,19 @@ test('recognises the sign-in redirect of a protected deployment instead of waiti
   const elsewhere = async () => new Response(null, { status: 302, headers: { location: 'https://example.com/' } })
   assert.equal(await readDeploymentSha('https://python-teacher-preview.vercel.app', '', elsewhere), null)
 })
+
+test('on the production branch, falls back to the production address when GitHub has no deployment record', async () => {
+  const github = { paginate: async () => [], rest: { repos: { listDeployments: null, listDeploymentStatuses: async () => ({ data: [] }) } } }
+  const served = ['old-sha', 'old-sha', 'new-sha']
+  const probed = []
+  const origin = await waitForVercel({ github, owner: 'o', repo: 'r', sha: 'new-sha', productionUrl: 'https://python-teacher-six.vercel.app/ignored', sleep: async () => {}, log() {},
+    probe: async url => { probed.push(url); return served.shift() } })
+  assert.equal(origin, 'https://python-teacher-six.vercel.app')
+  assert.deepEqual(probed, Array(3).fill('https://python-teacher-six.vercel.app'))
+})
+test('never treats production as the deployment of a commit it does not serve', async () => {
+  const github = { paginate: async () => [], rest: { repos: { listDeployments: null, listDeploymentStatuses: async () => ({ data: [] }) } } }
+  let time = 0
+  await assert.rejects(waitForVercel({ github, owner: 'o', repo: 'r', sha: 'new-sha', productionUrl: 'https://python-teacher-six.vercel.app', timeoutMs: 50, intervalMs: 10, now: () => time, sleep: async ms => { time += ms }, log() {}, probe: async () => 'old-sha' }), /No ready Vercel deployment/)
+  await assert.rejects(waitForVercel({ github, owner: 'o', repo: 'r', sha: 'x', productionUrl: 'https://evil.example' }), /vercel\.app/)
+})

@@ -17,8 +17,12 @@ export async function readDeploymentSha(url, secret = '', fetcher = fetch) {
 
 // Poll the newest Vercel deployment for this exact commit. Never reuse an older success.
 export async function waitForVercel({ github, owner, repo, sha, timeoutMs = 15 * 60_000,
-  intervalMs = 10_000, now = Date.now, probe = readDeploymentSha, secret = '', sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), log = console.log }) {
+  intervalMs = 10_000, now = Date.now, probe = readDeploymentSha, secret = '', productionUrl = '', sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), log = console.log }) {
   const deadline = now() + timeoutMs
+  const production = productionUrl ? new URL(productionUrl) : null
+  if (production && (production.protocol !== 'https:' || !production.hostname.endsWith('.vercel.app') || production.username || production.password || production.port)) {
+    throw new Error('PRODUCTION_URL must be an HTTPS vercel.app address.')
+  }
   while (now() < deadline) {
     const deployments = await github.paginate(github.rest.repos.listDeployments, { owner, repo, sha, per_page: 100 })
     const deployment = deployments
@@ -49,6 +53,19 @@ export async function waitForVercel({ github, owner, repo, sha, timeoutMs = 15 *
         }
       }
       log(`Waiting for Vercel deployment ${deployment.id}: ${latest?.state || 'no status yet'}`)
+    } else if (production) {
+      // This project's Vercel integration records no deployments on GitHub, so there is nothing
+      // to look up. For the production branch the public address says which commit it serves.
+      let deployedSha
+      try { deployedSha = await probe(production.origin, secret) } catch (error) {
+        if (error.message?.includes('Preview protection')) throw error
+        log('Production URL is not reachable yet')
+      }
+      if (deployedSha === sha) {
+        log(`Production serves ${sha}: ${production.origin}`)
+        return production.origin
+      }
+      log(`Waiting for production to serve ${sha}; it serves ${deployedSha ?? 'nothing yet'}`)
     } else log(`Waiting for Vercel to create a deployment for ${sha}`)
     await sleep(Math.min(intervalMs, Math.max(0, deadline - now())))
   }
@@ -58,7 +75,10 @@ export async function waitForVercel({ github, owner, repo, sha, timeoutMs = 15 *
 // The read-only Actions token discovers deployments; the optional bypass only reaches their origin.
 export async function run({ github, context, core }) {
   const sha = context.payload.pull_request?.head.sha || context.sha
-  const preview = await waitForVercel({ github, ...context.repo, sha, log: core.info, secret: process.env.VERCEL_AUTOMATION_BYPASS_SECRET })
+  // Only a build of the production branch ends up at the production address.
+  const onProductionBranch = !context.payload.pull_request && context.ref === `refs/heads/${context.payload.repository?.default_branch ?? 'main'}`
+  const productionUrl = onProductionBranch ? process.env.PRODUCTION_URL ?? '' : ''
+  const preview = await waitForVercel({ github, ...context.repo, sha, log: core.info, secret: process.env.VERCEL_AUTOMATION_BYPASS_SECRET, productionUrl })
   core.setOutput('preview', preview)
   await core.summary.addRaw(`Deployed tests will use commit ${sha}: ${preview}`).write()
 }

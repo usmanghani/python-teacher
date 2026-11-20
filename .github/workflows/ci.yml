@@ -82,6 +82,8 @@ jobs:
       - uses: actions/github-script@v7
         id: wait
         env:
+          # Used on the main branch when Vercel has recorded no deployment on GitHub for the commit.
+          PRODUCTION_URL: https://python-teacher-six.vercel.app
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && secrets.VERCEL_AUTOMATION_BYPASS_SECRET || '' }}
         with:
           script: |

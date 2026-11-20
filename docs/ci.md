@@ -8,6 +8,12 @@ The browser tests that script Pip's answers need the scripted model in `e2e/fake
 
 `CI gate` requires every job to succeed. There is no successful skip for missing previews. Deployment status events no longer start duplicate CI runs; the push/PR workflow waits directly. Forks never receive the protection bypass secret. A protected fork deployment needs a maintainer-approved deployment/test path; its inaccessible preview cannot pass silently.
 
+### When Vercel records no deployment on GitHub
+
+The wait job normally finds the deployment through GitHub's deployment records, which Vercel's GitHub integration writes. This project's integration does not write them. So on the `main` branch the job falls back to the production address (`PRODUCTION_URL` in the workflow) and waits until `/deployment.json` there reports the commit under test. That address is public, so it needs no bypass secret.
+
+Branches and pull requests have no such fallback: their previews are behind Vercel sign-in and only discoverable through the deployment records. Until Vercel writes those records for this repo (Project Settings, Git), the deployed checks only pass on `main`.
+
 ## Required external settings
 
 These are account settings, not properties that a workflow file can enforce:
