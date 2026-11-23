@@ -67,6 +67,14 @@ export class PythonClient {
     return this.active !== undefined
   }
 
+  /**
+   * Whether a whole program is running or waiting to run. Command-line entries do not count:
+   * they are short, and a new one simply waits its turn behind them.
+   */
+  get runningProgram(): boolean {
+    return [this.active, ...this.queue].some(job => job?.request.kind === 'run')
+  }
+
   private enqueue(kind: 'run' | 'line', code: string, handlers: RunHandlers): Promise<RunReport> {
     return new Promise(resolve => {
       this.queue.push({ ...handlers, request: { id: this.nextId++, kind, code }, resolve })

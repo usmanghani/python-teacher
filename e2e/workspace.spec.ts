@@ -112,3 +112,21 @@ test('turtle.shape changes the turtle on the canvas', async ({ page }) => {
   await command(page, 'turtle.shape()')
   await expect(page.getByRole('log')).toContainText("'turtle'")
 })
+
+test('a command-line entry typed while the last one is still working waits its turn', async ({ page }) => {
+  // The first entry takes a moment; the second is sent before it can have finished.
+  await command(page, 'total = sum(range(4_000_000))')
+  await command(page, 'print("queued", total > 0)')
+  await expect(page.getByRole('log')).toContainText('queued True')
+  await expect(page.getByRole('log')).not.toContainText('Stop the running program')
+})
+
+test('the command line is refused while a program is running', async ({ page }) => {
+  await page.locator('.monaco-editor').first().click()
+  await page.keyboard.press('ControlOrMeta+A')
+  await page.keyboard.type('total = sum(range(30_000_000))')
+  await page.getByTitle('Run (Ctrl+Enter)', { exact: true }).click()
+  await command(page, 'print("too soon")')
+  await expect(page.getByRole('log')).toContainText('Stop the running program before using the command line.')
+  await expect(page.getByRole('log')).not.toContainText('too soon')
+})
