@@ -42,6 +42,27 @@ jobs:
           path: test-results/unit.xml
           if-no-files-found: ignore
 
+  reviewer:
+    name: Reviewer agent tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: reviewer
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TEST_REF }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: reviewer/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+
   browser:
     name: Browser tests
     # Playwright 1.58 has no browser build for the newer ubuntu-latest image.
@@ -129,17 +150,19 @@ jobs:
   gate:
     name: CI gate
     if: always()
-    needs: [unit, browser, deployment, vercel]
+    needs: [unit, reviewer, browser, deployment, vercel]
     runs-on: ubuntu-latest
     steps:
       - name: Require local and deployed checks
         env:
           UNIT: ${{ needs.unit.result }}
+          REVIEWER: ${{ needs.reviewer.result }}
           BROWSER: ${{ needs.browser.result }}
           DEPLOYMENT: ${{ needs.deployment.result }}
           VERCEL: ${{ needs.vercel.result }}
         run: |
           test "$UNIT" = success
+          test "$REVIEWER" = success
           test "$BROWSER" = success
           test "$DEPLOYMENT" = success
           test "$VERCEL" = success
