@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures'
 
-for (const [id, title] of [['house', 'House'], ['star', 'Star'], ['flower', 'Flower'], ['rainbow-spiral', 'Rainbow spiral']]) {
+for (const [id, title] of [['house', 'House'], ['star', 'Star'], ['flower', 'Flower'], ['rainbow-spiral', 'Rainbow spiral'], ['logo-mastercard', 'Mastercard'], ['logo-delta', 'Delta Air Lines'], ['logo-olympic-rings', 'Olympic rings']]) {
   test(`loads, persists and runs ${title}`, async ({ page }) => {
     await page.goto('/')
     await expect(page.locator('.monaco-editor')).toBeVisible()
