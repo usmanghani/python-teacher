@@ -124,7 +124,8 @@ test('a command-line entry typed while the last one is still working waits its t
 test('the command line is refused while a program is running', async ({ page }) => {
   await page.locator('.monaco-editor').first().click()
   await page.keyboard.press('ControlOrMeta+A')
-  await page.keyboard.type('total = sum(range(30_000_000))')
+  // insertText, not type: typing lets the editor add its own closing brackets.
+  await page.keyboard.insertText('total = sum(range(60_000_000))')
   await page.getByTitle('Run (Ctrl+Enter)', { exact: true }).click()
   await command(page, 'print("too soon")')
   await expect(page.getByRole('log')).toContainText('Stop the running program before using the command line.')
