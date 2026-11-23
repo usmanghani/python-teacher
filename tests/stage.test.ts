@@ -182,6 +182,21 @@ describe('turtle.shape on the canvas', () => {
     draw(['shape', 0, 'circle', 2, 4])
     expect(screen.scale).toHaveBeenLastCalledWith(4, 2)
   })
+  it('outlines the turtle and its stamps with the width asked for', () => {
+    draw(['shape', 0, 'square', 1, 1, 6])
+    expect(screen.lineWidth).toBe(6)
+    draw(['stamp', 0, 0, 0, 'red', 'square', 1, 1, 4])
+    expect(ink.lineWidth).toBe(4)
+    expect(ink.stroke).toHaveBeenCalledTimes(1)
+  })
+  it('draws no outline at width zero, and a thin one when no width is given', () => {
+    draw(['shape', 0, 'square', 1, 1, 0])
+    expect(screen.fill).toHaveBeenCalledTimes(1)
+    expect(screen.stroke).not.toHaveBeenCalled()
+    draw(['shape', 0, 'square', 1, 1])
+    expect(screen.lineWidth).toBe(1)
+    expect(screen.stroke).toHaveBeenCalledTimes(1)
+  })
   it('gives each turtle its own shape', () => {
     draw(['reset'], ['new', 0, true], ['new', 1, true], ['shape', 1, 'circle', 1, 1])
     expect(screen.arc).toHaveBeenCalledTimes(1)

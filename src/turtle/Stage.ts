@@ -2,7 +2,7 @@ import type { DrawCommand } from '../python/runtime'
 
 export interface TurtlePose { x: number; y: number; heading: number; color: string; visible: boolean }
 
-interface Marker extends TurtlePose { id: number; shape: string; wide: number; long: number }
+interface Marker extends TurtlePose { id: number; shape: string; wide: number; long: number; outline: number }
 
 /**
  * Outlines for turtle.shape(), with the turtle at the origin facing along +x and y to its left.
@@ -61,7 +61,7 @@ export class Stage {
     this.waitUntil = 0
     this.speed = 6
     this.background = '#ffffff'
-    this.markers = new Map([[0, { id: 0, x: 0, y: 0, heading: 0, color: 'black', visible: true, shape: 'classic', wide: 1, long: 1 }]])
+    this.markers = new Map([[0, { id: 0, x: 0, y: 0, heading: 0, color: 'black', visible: true, shape: 'classic', wide: 1, long: 1, outline: 1 }]])
     this.inkCtx.clearRect(0, 0, this.ink.width, this.ink.height)
     this.render()
     this.settle()
@@ -148,7 +148,7 @@ export class Stage {
 
   private marker(id: number): Marker {
     let marker = this.markers.get(id)
-    if (!marker) { marker = { id, x: 0, y: 0, heading: 0, color: 'black', visible: true, shape: 'classic', wide: 1, long: 1 }; this.markers.set(id, marker) }
+    if (!marker) { marker = { id, x: 0, y: 0, heading: 0, color: 'black', visible: true, shape: 'classic', wide: 1, long: 1, outline: 1 }; this.markers.set(id, marker) }
     return marker
   }
 
@@ -197,6 +197,7 @@ export class Stage {
         marker.shape = command[2] as string
         marker.wide = command[3] as number
         marker.long = command[4] as number
+        marker.outline = (command[5] as number | undefined) ?? 1
         break
       }
       case 'show': this.marker(command[1] as number).visible = command[2] as boolean; break
@@ -230,14 +231,14 @@ export class Stage {
         break
       }
       case 'stamp': {
-        const [, x, y, heading, color, shape = 'classic', wide = 1, long = 1] = command as unknown as [string, number, number, number, string, string?, number?, number?]
-        this.drawTurtle(ink, { x, y, heading, color, shape, wide, long })
+        const [, x, y, heading, color, shape = 'classic', wide = 1, long = 1, outline = 1] = command as unknown as [string, number, number, number, string, string?, number?, number?, number?]
+        this.drawTurtle(ink, { x, y, heading, color, shape, wide, long, outline })
         break
       }
     }
   }
 
-  private drawTurtle(ctx: CanvasRenderingContext2D, { x, y, heading, color, shape, wide, long }: Omit<Marker, 'id' | 'visible'>): void {
+  private drawTurtle(ctx: CanvasRenderingContext2D, { x, y, heading, color, shape, wide, long, outline }: Omit<Marker, 'id' | 'visible'>): void {
     if (shape === 'blank') return
     const [sx, sy] = this.screen(x, y)
     ctx.save()
@@ -245,7 +246,7 @@ export class Stage {
     ctx.rotate((-heading * Math.PI) / 180)
     ctx.fillStyle = color
     ctx.strokeStyle = '#1c2924'
-    ctx.lineWidth = 1
+    ctx.lineWidth = outline
     ctx.beginPath()
     if (shape === 'circle') {
       // A stretched circle is an ellipse; the canvas is scaled only while the path is laid down so the outline stays thin.
@@ -260,7 +261,7 @@ export class Stage {
       ctx.closePath()
     }
     ctx.fill()
-    ctx.stroke()
+    if (outline > 0) ctx.stroke()
     ctx.restore()
   }
 

@@ -287,7 +287,7 @@ describe('marks', () => {
   })
   it('stamp leaves a copy of the turtle behind', () => {
     const { report, of } = run('turtle.pencolor("green")\nturtle.left(45)\nturtle.stamp()\nturtle.penup()\nturtle.forward(50)')
-    expect(of('stamp')).toEqual([['stamp', 0, 0, 45, 'green', 'classic', 1, 1]])
+    expect(of('stamp')).toEqual([['stamp', 0, 0, 45, 'green', 'classic', 1, 1, 1]])
     expect(report.drawing.strokes).toBe(1)
   })
   it('write puts text at the turtle', () => {
@@ -308,7 +308,7 @@ describe('turtle.shape', () => {
   it.each(['arrow', 'blank', 'circle', 'classic', 'square', 'triangle', 'turtle'])('changes the turtle to "%s" and reads it back', name => {
     const { report, of } = run(`print(turtle.shape("${name}"))\nprint(turtle.shape())`)
     expect(report.output).toBe(`None\n${name}`)
-    expect(of('shape')).toEqual([['shape', 0, name, 1, 1]])
+    expect(of('shape')).toEqual([['shape', 0, name, 1, 1, 1]])
   })
   it('lists the shapes it knows', () => {
     expect(printed('print(turtle.getshapes())\nprint(turtle.Screen().getshapes() == turtle.getshapes())')).toBe("['arrow', 'blank', 'circle', 'classic', 'square', 'triangle', 'turtle']\nTrue")
@@ -328,7 +328,7 @@ describe('turtle.shape', () => {
   it('can be chosen when a turtle is made', () => {
     const { report, of } = run('ada = turtle.Turtle("turtle")\nbob = turtle.Turtle(shape="circle")\nprint(ada.shape(), bob.shape())')
     expect(report.output).toBe('turtle circle')
-    expect(of('shape')).toEqual([['shape', 0, 'turtle', 1, 1], ['shape', 1, 'circle', 1, 1]])
+    expect(of('shape')).toEqual([['shape', 0, 'turtle', 1, 1, 1], ['shape', 1, 'circle', 1, 1, 1]])
     expect(failure('turtle.Turtle("dragon")')).toMatch(/no shape named dragon/)
   })
   it('belongs to one turtle, not all of them', () => {
@@ -346,7 +346,7 @@ describe('turtle.shape', () => {
     run('turtle.forward(10)')
     const commands: DrawCommand[] = []
     expect(python.line('turtle.shape("turtle")', { onCommands: batch => commands.push(...batch) }).ok).toBe(true)
-    expect(commands).toEqual([['shape', 0, 'turtle', 1, 1]])
+    expect(commands).toEqual([['shape', 0, 'turtle', 1, 1, 1]])
     let shown = ''
     python.line('turtle.shape()', { onOutput: text => { shown += text } })
     expect(shown).toBe("'turtle'\n")
@@ -360,7 +360,7 @@ describe('shapesize and turtlesize', () => {
   it('one number stretches both ways', () => {
     const { report, of } = run('turtle.shapesize(3)\nprint(turtle.shapesize())')
     expect(report.output).toBe('(3.0, 3.0, 1)')
-    expect(of('shape')).toEqual([['shape', 0, 'classic', 3, 3]])
+    expect(of('shape')).toEqual([['shape', 0, 'classic', 3, 3, 1]])
   })
   it('two numbers stretch width and length separately, and a third sets the outline', () => {
     expect(printed('turtle.shapesize(2, 5)\nprint(turtle.shapesize())')).toBe('(2.0, 5.0, 1)')
@@ -376,9 +376,20 @@ describe('shapesize and turtlesize', () => {
   })
   it('applies to the shape in use, to stamps, and to how much room a stamp takes', () => {
     const { report, of } = run('turtle.shape("square")\nturtle.shapesize(2, 4)\nturtle.stamp()')
-    expect(of('shape').at(-1)).toEqual(['shape', 0, 'square', 2, 4])
-    expect(of('stamp')).toEqual([['stamp', 0, 0, 0, 'black', 'square', 2, 4]])
+    expect(of('shape').at(-1)).toEqual(['shape', 0, 'square', 2, 4, 1])
+    expect(of('stamp')).toEqual([['stamp', 0, 0, 0, 'black', 'square', 2, 4, 1]])
     expect(report.drawing.bounds).toEqual({ left: -32, right: 32, bottom: -32, top: 32 })
+  })
+  it('sends the outline width to the page, for the turtle and for stamps', () => {
+    const { of } = run('turtle.shapesize(2, 3, 6)\nturtle.stamp()')
+    expect(of('shape')).toEqual([['shape', 0, 'classic', 2, 3, 6]])
+    expect(of('stamp')).toEqual([['stamp', 0, 0, 0, 'black', 'classic', 2, 3, 6]])
+    expect(printed('turtle.shapesize(outline=-4)\nprint(turtle.shapesize())')).toBe('(1.0, 1.0, 0)')
+  })
+  it('a blank stamp leaves no mark, so it is not counted as drawing', () => {
+    const { report, of } = run('turtle.shape("blank")\nturtle.stamp()')
+    expect(of('stamp')).toHaveLength(1)
+    expect(report.drawing).toEqual({ strokes: 0, bounds: null, colors: [] })
   })
   it('goes back to normal on reset()', () => {
     expect(printed('turtle.shapesize(4)\nturtle.reset()\nprint(turtle.shapesize())')).toBe('(1.0, 1.0, 1)')
@@ -461,7 +472,7 @@ describe('clearing and resetting', () => {
   })
   it('reset tells the page to redraw the turtle as new', () => {
     const { commands } = run('turtle.pencolor("red")\nturtle.hideturtle()\nturtle.goto(5, 5)\nturtle.reset()')
-    expect(commands.slice(-5)).toEqual([['clear'], ['shape', 0, 'classic', 1, 1], ['ink', 0, 'black'], ['show', 0, true], ['pose', 0, 0, 0, 0]])
+    expect(commands.slice(-5)).toEqual([['clear'], ['shape', 0, 'classic', 1, 1, 1], ['ink', 0, 'black'], ['show', 0, true], ['pose', 0, 0, 0, 0]])
   })
   it.each(['clearscreen', 'resetscreen'])('%s wipes the drawing', name => {
     const { report, of } = run(`turtle.forward(50)\nturtle.${name}()`)

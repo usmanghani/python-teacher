@@ -199,9 +199,10 @@ class Turtle:
         _stage.ink([(self._x, self._y)], fill, radius)
 
     def stamp(self):
-        wide, long, _outline = self._stretch
-        _stage.emit(["stamp", _round(self._x), _round(self._y), _round(self._heading), self._pencolor, self._shape, wide, long])
-        _stage.ink([(self._x, self._y)], self._pencolor, 8 * max(abs(wide), abs(long)))
+        wide, long, outline = self._stretch
+        _stage.emit(["stamp", _round(self._x), _round(self._y), _round(self._heading), self._pencolor, self._shape, wide, long, outline])
+        if self._shape != "blank":  # a blank stamp leaves no mark, so it is not part of the drawing
+            _stage.ink([(self._x, self._y)], self._pencolor, 8 * max(abs(wide), abs(long)))
 
     def write(self, arg, move=False, align="left", font=("Arial", 12, "normal")):
         size = font[1] if isinstance(font, (tuple, list)) and len(font) > 1 else 12
@@ -313,8 +314,8 @@ class Turtle:
 
     # --- what the turtle looks like ---
     def _emit_shape(self):
-        wide, long, _outline = self._stretch
-        _stage.emit(["shape", self._id, self._shape, wide, long])
+        wide, long, outline = self._stretch
+        _stage.emit(["shape", self._id, self._shape, wide, long, outline])
 
     def shape(self, name=None):
         if name is None:
@@ -336,7 +337,7 @@ class Turtle:
         elif stretch_len is not None:
             long = float(stretch_len)
         if outline is not None:
-            edge = outline
+            edge = max(0, outline)
         self._stretch = (wide, long, edge)
         self._emit_shape()
 
