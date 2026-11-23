@@ -51,6 +51,23 @@ describe('the Python client', () => {
     expect(results.map(result => result.output)).toEqual(['a', 'b', 'c'])
     expect(FakeWorker.made[0].requests.map(request => request.kind)).toEqual(['run', 'line', 'run'])
   })
+  it('says a program is running, but not a command-line entry, so entries can queue', async () => {
+    const python = client()
+    expect(python.runningProgram).toBe(false)
+    const entries = [python.line('a'), python.line('b')]
+    expect(python.busy).toBe(true)
+    expect(python.runningProgram).toBe(false)
+    expect((await Promise.all(entries)).map(result => result.output)).toEqual(['a', 'b'])
+    const program = python.run('c')
+    expect(python.runningProgram).toBe(true)
+    await program
+    expect(python.runningProgram).toBe(false)
+    // A program waiting behind a command-line entry counts too.
+    const waiting = [python.line('d'), python.run('e')]
+    expect(python.runningProgram).toBe(true)
+    await Promise.all(waiting)
+    expect(python.runningProgram).toBe(false)
+  })
   it('ends a program that never finishes by replacing the worker, and keeps working', async () => {
     const python = client()
     const stuck = python.run('forever')

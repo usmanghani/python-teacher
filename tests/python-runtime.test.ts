@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { loadPyodide } from 'pyodide'
 import { createRuntime, type DrawCommand, type PythonRuntime } from '../src/python/runtime'
 import { lessons } from '../src/teacher/lessons'
+import { examples as catalog } from '../src/examples/catalog'
 
 // The real thing: CPython (Pyodide) running the turtle module and runner the page uses.
 let python: PythonRuntime
@@ -122,10 +123,31 @@ describe('the course and the examples', () => {
     const { left, right, bottom, top } = report.drawing.bounds!
     expect(Math.max(-left, right, -bottom, top)).toBeLessThanOrEqual(320)
   })
-  const examples = readdirSync(new URL('../examples/', import.meta.url)).filter(name => name.endsWith('.py'))
-  it.each(examples)('example %s runs cleanly and draws', name => {
+  const examples = readdirSync(new URL('../examples/', import.meta.url), { recursive: true, encoding: 'utf8' }).filter(name => name.endsWith('.py')).sort()
+  it.each(examples)('example %s runs cleanly, draws, and fits the pane', name => {
     const { report } = run(readFileSync(new URL(`../examples/${name}`, import.meta.url), 'utf8'))
     expect(report.errors).toEqual([])
     expect(report.drawing.strokes).toBeGreaterThan(0)
+    const { left, right, bottom, top } = report.drawing.bounds!
+    expect(Math.max(-left, right, -bottom, top)).toBeLessThanOrEqual(320)
+  })
+  it('every example file is in the menu, once', () => {
+    expect(catalog.map(example => example.source).sort()).toEqual(examples.map(name => readFileSync(new URL(`../examples/${name}`, import.meta.url), 'utf8')).sort())
+    expect(new Set(catalog.map(example => example.id)).size).toBe(catalog.length)
+  })
+  it('the Mastercard overlap closes into a lens between the two circles', () => {
+    const { commands } = run(readFileSync(new URL('../examples/logos/mastercard.py', import.meta.url), 'utf8'))
+    const points = commands.find(command => command[0] === 'fill')![1] as Array<[number, number]>
+    expect(points.at(-1)![0]).toBeCloseTo(points[0][0], 0)
+    expect(points.at(-1)![1]).toBeCloseTo(points[0][1], 0)
+    const widest = Math.max(...points.map(([x]) => Math.abs(x)))
+    expect(widest).toBeGreaterThan(28)
+    expect(widest).toBeLessThanOrEqual(30)
+  })
+  it('the Mitsubishi diamonds each start and end at the middle', () => {
+    const { commands } = run(readFileSync(new URL('../examples/logos/mitsubishi.py', import.meta.url), 'utf8'))
+    const fills = commands.filter(command => command[0] === 'fill')
+    expect(fills).toHaveLength(3)
+    for (const fill of fills) expect((fill[1] as Array<[number, number]>).at(-1)!.map(Math.round).map(Math.abs)).toEqual([0, 0])
   })
 })

@@ -111,7 +111,9 @@ export default function App() {
 
   /** One line at the command line, in whatever the last program left behind. */
   const replSubmit = useCallback((line: string) => {
-    if (python().busy) {
+    // Only a running program blocks the command line. An entry typed while the last one is
+    // still being worked out waits its turn, so quick typing is never turned away.
+    if (python().runningProgram) {
       setOutput(previous => previous + 'Stop the running program before using the command line.\n')
       return
     }
