@@ -2,7 +2,22 @@ import type { DrawCommand } from '../python/runtime'
 
 export interface TurtlePose { x: number; y: number; heading: number; color: string; visible: boolean }
 
-interface Marker extends TurtlePose { id: number }
+interface Marker extends TurtlePose { id: number; shape: string; wide: number; long: number }
+
+/**
+ * Outlines for turtle.shape(), with the turtle at the origin facing along +x and y to its left.
+ * All but "classic" are the standard library's shapes, turned to face +x.
+ */
+export const SHAPES: Record<string, Array<[number, number]>> = {
+  classic: [[10, 0], [-6, 6], [-3, 0], [-6, -6]],
+  arrow: [[0, -10], [0, 10], [10, 0]],
+  square: [[-10, 10], [10, 10], [10, -10], [-10, -10]],
+  triangle: [[-5.77, 10], [11.55, 0], [-5.77, -10]],
+  turtle: [
+    [16, 0], [14, -2], [10, -1], [7, -4], [9, -7], [8, -9], [5, -6], [1, -7], [-3, -5], [-6, -8], [-8, -6], [-5, -4], [-7, 0],
+    [-5, 4], [-8, 6], [-6, 8], [-3, 5], [1, 7], [5, 6], [8, 9], [9, 7], [7, 4], [10, 1], [14, 2],
+  ],
+}
 type Line = [x1: number, y1: number, x2: number, y2: number, color: string, width: number]
 
 /** Turtle steps drawn per animation frame at each turtle.speed() setting; 0 means "at once". */
@@ -46,7 +61,7 @@ export class Stage {
     this.waitUntil = 0
     this.speed = 6
     this.background = '#ffffff'
-    this.markers = new Map([[0, { id: 0, x: 0, y: 0, heading: 0, color: 'black', visible: true }]])
+    this.markers = new Map([[0, { id: 0, x: 0, y: 0, heading: 0, color: 'black', visible: true, shape: 'classic', wide: 1, long: 1 }]])
     this.inkCtx.clearRect(0, 0, this.ink.width, this.ink.height)
     this.render()
     this.settle()
@@ -133,7 +148,7 @@ export class Stage {
 
   private marker(id: number): Marker {
     let marker = this.markers.get(id)
-    if (!marker) { marker = { id, x: 0, y: 0, heading: 0, color: 'black', visible: true }; this.markers.set(id, marker) }
+    if (!marker) { marker = { id, x: 0, y: 0, heading: 0, color: 'black', visible: true, shape: 'classic', wide: 1, long: 1 }; this.markers.set(id, marker) }
     return marker
   }
 
@@ -177,6 +192,13 @@ export class Stage {
         break
       }
       case 'ink': this.marker(command[1] as number).color = command[2] as string; break
+      case 'shape': {
+        const marker = this.marker(command[1] as number)
+        marker.shape = command[2] as string
+        marker.wide = command[3] as number
+        marker.long = command[4] as number
+        break
+      }
       case 'show': this.marker(command[1] as number).visible = command[2] as boolean; break
       case 'speed': this.speed = Math.max(0, Math.min(10, command[1] as number)); break
       case 'bg': this.background = command[1] as string; break
@@ -207,11 +229,16 @@ export class Stage {
         ink.fillText(text, ...this.screen(x, y))
         break
       }
-      case 'stamp': this.drawTurtle(ink, command[1] as number, command[2] as number, command[3] as number, command[4] as string); break
+      case 'stamp': {
+        const [, x, y, heading, color, shape = 'classic', wide = 1, long = 1] = command as unknown as [string, number, number, number, string, string?, number?, number?]
+        this.drawTurtle(ink, { x, y, heading, color, shape, wide, long })
+        break
+      }
     }
   }
 
-  private drawTurtle(ctx: CanvasRenderingContext2D, x: number, y: number, heading: number, color: string): void {
+  private drawTurtle(ctx: CanvasRenderingContext2D, { x, y, heading, color, shape, wide, long }: Omit<Marker, 'id' | 'visible'>): void {
+    if (shape === 'blank') return
     const [sx, sy] = this.screen(x, y)
     ctx.save()
     ctx.translate(sx, sy)
@@ -220,11 +247,18 @@ export class Stage {
     ctx.strokeStyle = '#1c2924'
     ctx.lineWidth = 1
     ctx.beginPath()
-    ctx.moveTo(10, 0)
-    ctx.lineTo(-6, 6)
-    ctx.lineTo(-3, 0)
-    ctx.lineTo(-6, -6)
-    ctx.closePath()
+    if (shape === 'circle') {
+      // A stretched circle is an ellipse; the canvas is scaled only while the path is laid down so the outline stays thin.
+      ctx.save()
+      ctx.scale(long, wide)
+      ctx.arc(0, 0, 10, 0, Math.PI * 2)
+      ctx.restore()
+    } else {
+      // Canvas y points down, so "to the turtle's left" is negative.
+      const outline = SHAPES[shape] ?? SHAPES.classic
+      outline.forEach(([px, py], index) => (index ? ctx.lineTo(px * long, -py * wide) : ctx.moveTo(px * long, -py * wide)))
+      ctx.closePath()
+    }
     ctx.fill()
     ctx.stroke()
     ctx.restore()
@@ -234,6 +268,6 @@ export class Stage {
     this.ctx.fillStyle = this.background
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
     this.ctx.drawImage(this.ink, 0, 0)
-    for (const marker of this.markers.values()) if (marker.visible) this.drawTurtle(this.ctx, marker.x, marker.y, marker.heading, marker.color)
+    for (const marker of this.markers.values()) if (marker.visible) this.drawTurtle(this.ctx, marker)
   }
 }

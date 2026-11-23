@@ -39,7 +39,13 @@ class _Stage:
         self.colors = []
         self.turtles = []
         self.colormode = 1.0
+        self.background = "white"
         self.output = 0
+
+    def wipe(self):
+        """Forget what was drawn, as clear() does. The turtles stay where they are."""
+        self.emit(["clear"])
+        self.strokes, self.bounds, self.colors = 0, None, []
 
     def emit(self, command):
         self.sent += 1
@@ -87,8 +93,17 @@ def _color(value, *rest):
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
+SHAPES = ("arrow", "blank", "circle", "classic", "square", "triangle", "turtle")
+
+
+class TurtleGraphicsError(Exception):
+    pass
+
+
 class Turtle:
     def __init__(self, shape="classic", visible=True):
+        if shape not in SHAPES:
+            raise TurtleGraphicsError(f"There is no shape named {shape}. Choose one of: {', '.join(SHAPES)}.")
         self._id = len(_stage.turtles)
         _stage.turtles.append(self)
         self._x = 0.0
@@ -101,7 +116,11 @@ class Turtle:
         self._visible = visible
         self._fill = None
         self._speed = 6
+        self._shape = shape
+        self._stretch = (1.0, 1.0, 1)
         _stage.emit(["new", self._id, self._visible])
+        if shape != "classic":
+            self._emit_shape()
 
     # --- moving ---
     def _go(self, x, y):
@@ -180,8 +199,9 @@ class Turtle:
         _stage.ink([(self._x, self._y)], fill, radius)
 
     def stamp(self):
-        _stage.emit(["stamp", _round(self._x), _round(self._y), _round(self._heading), self._pencolor])
-        _stage.ink([(self._x, self._y)], self._pencolor, 8)
+        wide, long, _outline = self._stretch
+        _stage.emit(["stamp", _round(self._x), _round(self._y), _round(self._heading), self._pencolor, self._shape, wide, long])
+        _stage.ink([(self._x, self._y)], self._pencolor, 8 * max(abs(wide), abs(long)))
 
     def write(self, arg, move=False, align="left", font=("Arial", 12, "normal")):
         size = font[1] if isinstance(font, (tuple, list)) and len(font) > 1 else 12
@@ -255,13 +275,15 @@ class Turtle:
         _stage.emit(["speed", self._speed])
 
     def clear(self):
-        _stage.emit(["clear"])
-        _stage.strokes, _stage.bounds, _stage.colors = 0, None, []
+        _stage.wipe()
 
     def reset(self):
         self.clear()
         self._x = self._y = self._heading = 0.0
         self._down, self._pencolor, self._fillcolor, self._size, self._visible = True, "black", "black", 1, True
+        self._fill = None
+        self._stretch = (1.0, 1.0, 1)  # like the real turtle, reset() keeps the shape but not its size
+        self._emit_shape()
         _stage.emit(["ink", self._id, "black"])
         _stage.emit(["show", self._id, True])
         self._pose()
@@ -289,12 +311,34 @@ class Turtle:
             x, y = x.position() if isinstance(x, Turtle) else x
         return math.degrees(math.atan2(y - self._y, x - self._x)) % 360
 
-    # --- accepted so ordinary turtle programs run unchanged ---
-    def shape(self, name=None):
-        return "classic"
+    # --- what the turtle looks like ---
+    def _emit_shape(self):
+        wide, long, _outline = self._stretch
+        _stage.emit(["shape", self._id, self._shape, wide, long])
 
-    def shapesize(self, *args, **kwargs):
-        return None
+    def shape(self, name=None):
+        if name is None:
+            return self._shape
+        if name not in SHAPES:
+            raise TurtleGraphicsError(f"There is no shape named {name}. Choose one of: {', '.join(SHAPES)}.")
+        self._shape = name
+        self._emit_shape()
+
+    def shapesize(self, stretch_wid=None, stretch_len=None, outline=None):
+        wide, long, edge = self._stretch
+        if stretch_wid is None and stretch_len is None and outline is None:
+            return self._stretch
+        if stretch_wid == 0 or stretch_len == 0:
+            raise TurtleGraphicsError("stretch_wid/stretch_len must not be zero")
+        if stretch_wid is not None:
+            wide = float(stretch_wid)
+            long = wide if stretch_len is None else float(stretch_len)
+        elif stretch_len is not None:
+            long = float(stretch_len)
+        if outline is not None:
+            edge = outline
+        self._stretch = (wide, long, edge)
+        self._emit_shape()
 
     def getscreen(self):
         return Screen()
@@ -316,8 +360,10 @@ class Turtle:
 
 class _Screen:
     def bgcolor(self, *args):
-        if args:
-            _stage.emit(["bg", _color(*args)])
+        if not args:
+            return _stage.background
+        _stage.background = _color(*args)
+        _stage.emit(["bg", _stage.background])
 
     def colormode(self, mode=None):
         if mode is None:
@@ -327,7 +373,13 @@ class _Screen:
         _stage.colormode = 255 if mode == 255 else 1.0
 
     def clear(self):
-        _stage.emit(["clear"])
+        _stage.wipe()
+
+    def getshapes(self):
+        return list(SHAPES)
+
+    def turtles(self):
+        return list(_stage.turtles)
 
     clearscreen = reset = resetscreen = clear
 
@@ -360,6 +412,7 @@ def _module():
     module = types.ModuleType("turtle")
     module.Turtle = module.Pen = module.RawTurtle = Turtle
     module.Screen = Screen
+    module.TurtleGraphicsError = TurtleGraphicsError
     module.getturtle = module.getpen = _first
     names = [name for name in vars(Turtle) if not name.startswith("_")]
     for name in names:
@@ -367,7 +420,7 @@ def _module():
             return getattr(_first(), _name)(*args, **kwargs)
         call.__name__ = name
         setattr(module, name, call)
-    for name in ("bgcolor", "colormode", "setup", "title", "tracer", "update", "mainloop", "exitonclick", "bye", "delay", "screensize", "clearscreen", "resetscreen", "window_width", "window_height", "listen", "onkey", "onkeypress", "onclick", "onscreenclick", "ontimer"):
+    for name in ("bgcolor", "colormode", "setup", "title", "tracer", "update", "mainloop", "exitonclick", "bye", "delay", "screensize", "clearscreen", "resetscreen", "window_width", "window_height", "getshapes", "turtles", "listen", "onkey", "onkeypress", "onclick", "onscreenclick", "ontimer"):
         setattr(module, name, getattr(_screen, name))
     module.done = _screen.mainloop
     module.__all__ = [name for name in vars(module) if not name.startswith("_")]

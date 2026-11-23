@@ -81,3 +81,34 @@ test('mobile layout keeps the listener usable', async ({ page }) => {
   await expect(page.getByRole('log')).toContainText('MOBILE')
 })
 
+
+test('turtle.shape changes the turtle on the canvas', async ({ page }) => {
+  // Count the pixels that are not white: with nothing drawn, that is the turtle itself.
+  const marked = () => page.locator('.canvas-panel canvas').first().evaluate((el: HTMLCanvasElement) => {
+    const d = el.getContext('2d')!.getImageData(0, 0, el.width, el.height).data
+    let n = 0
+    for (let i = 0; i < d.length; i += 4) if (d[i] < 220 || d[i + 1] < 220 || d[i + 2] < 220) n++
+    return n
+  })
+  await command(page, 'import turtle')
+  await command(page, 'turtle.shape()')
+  await expect(page.getByRole('log')).toContainText("'classic'")
+  const classic = await marked()
+  expect(classic).toBeGreaterThan(20)
+
+  await command(page, 'turtle.shape("square")')
+  await expect.poll(marked).toBeGreaterThan(classic * 2)
+  const square = await marked()
+  await command(page, 'turtle.shapesize(4)')
+  await expect.poll(marked).toBeGreaterThan(square * 8)
+
+  await command(page, 'turtle.shape("blank")')
+  await expect.poll(marked).toBe(0)
+  await command(page, 'turtle.shape("turtle")')
+  await expect.poll(marked).toBeGreaterThan(square * 4)
+
+  await command(page, 'turtle.shape("dragon")')
+  await expect(page.getByRole('log')).toContainText('There is no shape named dragon')
+  await command(page, 'turtle.shape()')
+  await expect(page.getByRole('log')).toContainText("'turtle'")
+})

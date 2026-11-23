@@ -31,6 +31,7 @@ function createMockCtx() {
     translate: vi.fn(),
     rotate: vi.fn(),
     closePath: vi.fn(),
+    scale: vi.fn(),
     save: vi.fn(),
     restore: vi.fn(),
     fillText: vi.fn(),
